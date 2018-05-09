@@ -67,90 +67,180 @@ function extendWithDotEnv(inputEnv, dotEnvPath = '.env') {
     return extend(parsed, inputEnv)
 }
 
-function cleanEnv(inputEnv, specs = {}, options = {}) {
-    let output = {}
-    let defaultNodeEnv = ''
-    const errors = {}
-    const env =
-        options.dotEnvPath !== null ? extendWithDotEnv(inputEnv, options.dotEnvPath) : inputEnv
-    const varKeys = Object.keys(specs)
+/**
+ * Returns the input environment object, which is either loaded from a .env file
+ * if options.dotEnvPath is set or provided as the first argument to cleanEnv
+ * 
+ * @see cleanEnv
+ */
+function getEnv({ inputEnv, options }) {
+    let env = inputEnv
 
-    // If validation for NODE_ENV isn't specified, use the default validation:
-    if (!varKeys.includes('NODE_ENV')) {
-        defaultNodeEnv = validateVar({
-            name: 'NODE_ENV',
-            spec: str({ choices: ['development', 'test', 'production'] }),
-            rawValue: env.NODE_ENV || 'production'
-        })
+    if (options.dotEnvPath !== null) {
+        env = extendWithDotEnv(inputEnv, options.dotEnvPath)
     }
 
-    for (const k of varKeys) {
-        const spec = specs[k]
-        const usingDevDefault = env.NODE_ENV !== 'production' && spec.hasOwnProperty('devDefault')
-        const devDefault = usingDevDefault ? spec.devDefault : undefined
-        let rawValue = env[k]
+    if (!env.NODE_ENV || env.NODE_ENV === '') {
+        delete env.NODE_ENV
+    }
 
-        if (rawValue === undefined) {
-            rawValue = devDefault === undefined ? spec.default : devDefault
+    return env
+}
+
+/**
+ * Returns a devDefault value for a spec object.
+ */
+function getDevDefault({ spec, env }) {
+    const isNotProd = env.NODE_ENV !== 'production'
+    const hasDevDefault = spec.hasOwnProperty('devDefault')
+
+    return hasDevDefault && isNotProd ? spec.devDefault : undefined
+}
+
+/**
+ * Returns a raw value from the input env. Will return a devDefault value if
+ * appropriate.
+ */
+function getRawValue({ spec, env, specKey }) {
+    const devDefault = getDevDefault({ spec, env })
+
+    if (env[specKey] === undefined) {
+        return devDefault === undefined ? spec.default : devDefault
+    }
+
+    return env[specKey]
+}
+
+/**
+ * If the provided raw value equals the test symbol, throw immediately
+ */
+function assertTestOnlySymbol({ spec, rawValue }) {
+    if (rawValue === testOnlySymbol) {
+        throw new EnvMissingError(formatSpecDescription(spec))
+    }
+}
+
+/**
+ * Default values can be anything falsy (including an explicitly set undefined),
+ * without triggering validation errors.
+ */
+function usingFalsyDefault({ spec, env, rawValue }) {
+    const isNotProd = env.NODE_ENV !== 'production'
+    const hasDevDefault = spec.hasOwnProperty('devDefault')
+    const hasDefault = spec.hasOwnProperty('default')
+
+    if (hasDefault && spec.default === rawValue) {
+        return true
+    }
+
+    if (hasDevDefault && isNotProd && spec.devDefault === rawValue) {
+        return true
+    }
+
+    return false
+}
+
+/**
+ * Validates a raw value from the input env. Is aware of falsy defaults.
+ */
+function validate({ spec, specKey, rawValue, env }) {
+    if (rawValue === undefined) {
+        if (!usingFalsyDefault({ spec, env, rawValue })) {
+            throw new EnvMissingError(formatSpecDescription(spec))
         }
 
-        // Default values can be anything falsy (including an explicitly set undefined), without
-        // triggering validation errors:
-        const usingFalsyDefault =
-            (spec.hasOwnProperty('default') && spec.default === rawValue) ||
-            (usingDevDefault && devDefault === rawValue)
+        return undefined
+    }
+
+    return validateVar({ name: specKey, spec, rawValue })
+}
+
+/**
+ * Recursive function to validate the keys in the user-provided spec map.
+ * 
+ * Keys without a `requiredWhen` are processed first, then the function recurses
+ * to validate the keys with a `requiredWhen` property. If `requiredWhen`
+ * evaluates to false, any validation error is ignored.
+ * 
+ * NOTE: `requiredWhen` is provided the output up until the current env var is
+ * processed, so it will **not** be the complete parsed output.
+ */
+function validateSpecs({ specs, env, deferKeys = [], output = {}, options }) {
+    const errors = {}
+    let hasDeferments = false
+
+    const keysToValidate =
+        Array.prototype.isPrototypeOf(deferKeys) && deferKeys.length > 0
+            ? deferKeys
+            : Object.keys(specs)
+
+    const shouldProcessDeferments = keysToValidate === deferKeys
+
+    keysToValidate.forEach(specKey => {
+        const spec = specs[specKey]
+        const hasRequiredWhen = typeof spec.requiredWhen === 'function'
+
+        if (!shouldProcessDeferments && hasRequiredWhen) {
+            hasDeferments = true
+            return deferKeys.push(specKey)
+        }
+
+        const rawValue = getRawValue({ spec, env, specKey })
 
         try {
-            if (rawValue === testOnlySymbol) {
-                throw new EnvMissingError(formatSpecDescription(spec))
-            }
+            assertTestOnlySymbol({ spec, rawValue })
+            output[specKey] = validate({ spec, specKey, rawValue, env })
+        } catch (error) {
+            if (hasRequiredWhen && !spec.requiredWhen(output)) return
+            if (options.reporter === null) throw error
 
-            if (typeof spec.requiredWhen === 'function') {
-                if (!spec.requiredWhen(env)) {
-                    continue
-                }
-            }
-
-            if (rawValue === undefined) {
-                if (!usingFalsyDefault) {
-                    throw new EnvMissingError(formatSpecDescription(spec))
-                }
-
-                output[k] = undefined
-            } else {
-                output[k] = validateVar({ name: k, spec, rawValue })
-            }
-        } catch (err) {
-            if (options.reporter === null) throw err
-            errors[k] = err
+            errors[specKey] = error
         }
+    })
+
+    if (hasDeferments && deferKeys.length > 0) {
+        return validateSpecs({ specs, env, deferKeys, output, options })
     }
+
+    return { output, errors }
+}
+
+function cleanEnv(inputEnv, userSpecs = {}, options = {}) {
+    const env = getEnv({ inputEnv, options })
+
+    const specs = extend(
+        {
+            NODE_ENV: str({ choices: ['development', 'test', 'production'], default: 'production' })
+        },
+        userSpecs
+    )
+
+    const { output, errors } = validateSpecs({ specs, env, options })
 
     // If we need to run Object.assign() on output, we must do it before the
     // defineProperties() call, otherwise the properties would be lost
-    output = options.strict ? output : extend(env, output)
+    let finalOutput = options.strict ? output : extend(env, output)
 
     // Provide is{Prod/Dev/Test} properties for more readable NODE_ENV checks
     // Node that isDev and isProd are just aliases to isDevelopment and isProduction
-    const computedNodeEnv = defaultNodeEnv || output.NODE_ENV
-    Object.defineProperties(output, {
-        isDevelopment: { value: computedNodeEnv === 'development' },
-        isDev: { value: computedNodeEnv === 'development' },
-        isProduction: { value: computedNodeEnv === 'production' },
-        isProd: { value: computedNodeEnv === 'production' },
-        isTest: { value: computedNodeEnv === 'test' }
+    Object.defineProperties(finalOutput, {
+        isDevelopment: { value: output.NODE_ENV === 'development' },
+        isDev: { value: output.NODE_ENV === 'development' },
+        isProduction: { value: output.NODE_ENV === 'production' },
+        isProd: { value: output.NODE_ENV === 'production' },
+        isTest: { value: output.NODE_ENV === 'test' }
     })
 
     if (options.transformer) {
-        output = options.transformer(output)
+        finalOutput = options.transformer(finalOutput)
     }
 
     const reporter = options.reporter || require('./lib/reporter')
-    reporter({ errors, env: output })
+    reporter({ errors, env: finalOutput })
 
-    if (options.strict) output = require('./lib/strictProxy')(output, env)
+    if (options.strict) finalOutput = require('./lib/strictProxy')(finalOutput, env)
 
-    return Object.freeze(output)
+    return Object.freeze(finalOutput)
 }
 
 /**

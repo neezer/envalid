@@ -20,7 +20,7 @@ test('transformer option: allow transformation of keys', () => {
         },
         opts
     )
-    assert.deepEqual(env, { foo: 'bar', foo_bar: 'baz' })
+    assert.deepEqual(env, { foo: 'bar', foo_bar: 'baz', node_env: 'production' })
 })
 
 test('missing required string field', () => {
@@ -40,7 +40,7 @@ test('using provided default value', () => {
             FOO: str({ default: 'asdf' })
         }
     )
-    assert.deepEqual(env, { FOO: 'asdf' })
+    assert.deepEqual(env, { FOO: 'asdf', NODE_ENV: 'production' })
 })
 
 test('default value can be blank', () => {
@@ -50,7 +50,7 @@ test('default value can be blank', () => {
             FOO: str({ default: '' })
         }
     )
-    assert.deepEqual(env, { FOO: '' })
+    assert.deepEqual(env, { FOO: '', NODE_ENV: 'production' })
 })
 
 test('default set to undefined', () => {
@@ -60,7 +60,7 @@ test('default set to undefined', () => {
             FOO: str({ default: undefined })
         }
     )
-    assert.deepEqual(env, { FOO: undefined })
+    assert.deepEqual(env, { FOO: undefined, NODE_ENV: 'production' })
 })
 
 test('devDefault set to undefined', () => {
@@ -209,19 +209,33 @@ test('testOnly', () => {
 test('conditionally required env', () => {
     // Throws when the env var isn't in the given choices:
     const spec = {
-        FOO: str({ requiredWhen: rawEnv => !!rawEnv.REQUIRE_FOO }),
+        FOO: str({ requiredWhen: env => env.REQUIRE_FOO }),
         REQUIRE_FOO: bool({ default: false })
     }
 
-    // FOO not required when REQUIRE_FOO is false
-    assert.deepEqual(cleanEnv({}, spec, makeSilent), { REQUIRE_FOO: false })
+    // FOO not required when REQUIRE_FOO is absent
+    assert.deepEqual(cleanEnv({}, spec, makeSilent), { REQUIRE_FOO: false, NODE_ENV: 'production' })
 
-    // FOO is still read when REQUIRE_FOO is false
-    assert.deepEqual(cleanEnv({ FOO: 'bar' }, spec, makeSilent), { REQUIRE_FOO: false, FOO: 'bar' })
+    // FOO not required when REQUIRE_FOO is false
+    assert.deepEqual(cleanEnv({ REQUIRE_FOO: 'false' }, spec, makeSilent), {
+        REQUIRE_FOO: false,
+        NODE_ENV: 'production'
+    })
+
+    // FOO is still read when REQUIRE_FOO is absent
+    assert.deepEqual(cleanEnv({ FOO: 'bar' }, spec, makeSilent), {
+        REQUIRE_FOO: false,
+        FOO: 'bar',
+        NODE_ENV: 'production'
+    })
 
     // FOO is required when REQUIRE_FOO is true and FOO is not provided
-    assert.throws(() => cleanEnv({ REQUIRE_FOO: true }, spec, makeSilent), EnvMissingError)
+    assert.throws(() => cleanEnv({ REQUIRE_FOO: 'true' }, spec, makeSilent), EnvMissingError)
 
     // Works fine when REQUIRE_FOO is true and FOO is satisfied
-    assertPassthrough({ REQUIRE_FOO: true, FOO: 'bar' }, spec)
+    assert.deepEqual(cleanEnv({ REQUIRE_FOO: 'true', FOO: 'bar' }, spec, makeSilent), {
+        REQUIRE_FOO: true,
+        FOO: 'bar',
+        NODE_ENV: 'production'
+    })
 })

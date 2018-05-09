@@ -25,42 +25,42 @@ test('bool() works with various formats', () => {
     )
 
     const trueBool = cleanEnv({ FOO: true }, { FOO: bool() })
-    assert.deepEqual(trueBool, { FOO: true })
+    assert.deepEqual(trueBool, { FOO: true, NODE_ENV: 'production' })
     const falseBool = cleanEnv({ FOO: false }, { FOO: bool() })
-    assert.deepEqual(falseBool, { FOO: false })
+    assert.deepEqual(falseBool, { FOO: false, NODE_ENV: 'production' })
 
     const truthyNum = cleanEnv({ FOO: '1' }, { FOO: bool() })
-    assert.deepEqual(truthyNum, { FOO: true })
+    assert.deepEqual(truthyNum, { FOO: true, NODE_ENV: 'production' })
     const falsyNum = cleanEnv({ FOO: '0' }, { FOO: bool() })
-    assert.deepEqual(falsyNum, { FOO: false })
+    assert.deepEqual(falsyNum, { FOO: false, NODE_ENV: 'production' })
 
     const trueStr = cleanEnv({ FOO: 'true' }, { FOO: bool() })
-    assert.deepEqual(trueStr, { FOO: true })
+    assert.deepEqual(trueStr, { FOO: true, NODE_ENV: 'production' })
     const falseStr = cleanEnv({ FOO: 'false' }, { FOO: bool() })
-    assert.deepEqual(falseStr, { FOO: false })
+    assert.deepEqual(falseStr, { FOO: false, NODE_ENV: 'production' })
 
     const t = cleanEnv({ FOO: 't' }, { FOO: bool() })
-    assert.deepEqual(t, { FOO: true })
+    assert.deepEqual(t, { FOO: true, NODE_ENV: 'production' })
     const f = cleanEnv({ FOO: 'f' }, { FOO: bool() })
-    assert.deepEqual(f, { FOO: false })
+    assert.deepEqual(f, { FOO: false, NODE_ENV: 'production' })
 
     const defaultF = cleanEnv({}, { FOO: bool({ default: false }) })
-    assert.deepEqual(defaultF, { FOO: false })
+    assert.deepEqual(defaultF, { FOO: false, NODE_ENV: 'production' })
 })
 
 test('num()', () => {
     assert.equal(num().type, 'num')
     const withInt = cleanEnv({ FOO: '1' }, { FOO: num() })
-    assert.deepEqual(withInt, { FOO: 1 })
+    assert.deepEqual(withInt, { FOO: 1, NODE_ENV: 'production' })
 
     const withFloat = cleanEnv({ FOO: '0.34' }, { FOO: num() })
-    assert.deepEqual(withFloat, { FOO: 0.34 })
+    assert.deepEqual(withFloat, { FOO: 0.34, NODE_ENV: 'production' })
 
     const withExponent = cleanEnv({ FOO: '1e3' }, { FOO: num() })
-    assert.deepEqual(withExponent, { FOO: 1000 })
+    assert.deepEqual(withExponent, { FOO: 1000, NODE_ENV: 'production' })
 
     const withZero = cleanEnv({ FOO: 0 }, { FOO: num() })
-    assert.deepEqual(withZero, { FOO: 0 })
+    assert.deepEqual(withZero, { FOO: 0, NODE_ENV: 'production' })
 
     assert.throws(() => cleanEnv({ FOO: 'asdf' }, { FOO: num() }, makeSilent), EnvError)
 })
@@ -96,13 +96,13 @@ test('port()', () => {
     const spec = { FOO: port() }
 
     const with1 = cleanEnv({ FOO: '1' }, spec)
-    assert.deepEqual(with1, { FOO: 1 })
+    assert.deepEqual(with1, { FOO: 1, NODE_ENV: 'production' })
     const with80 = cleanEnv({ FOO: '80' }, spec)
-    assert.deepEqual(with80, { FOO: 80 })
+    assert.deepEqual(with80, { FOO: 80, NODE_ENV: 'production' })
     const with80Num = cleanEnv({ FOO: 80 }, spec)
-    assert.deepEqual(with80Num, { FOO: 80 })
+    assert.deepEqual(with80Num, { FOO: 80, NODE_ENV: 'production' })
     const with65535 = cleanEnv({ FOO: '65535' }, spec)
-    assert.deepEqual(with65535, { FOO: 65535 })
+    assert.deepEqual(with65535, { FOO: 65535, NODE_ENV: 'production' })
 
     assert.throws(() => cleanEnv({ FOO: '' }, spec, makeSilent), EnvError)
     assert.throws(() => cleanEnv({ FOO: '0' }, spec, makeSilent), EnvError)
@@ -116,7 +116,7 @@ test('port()', () => {
 test('json()', () => {
     assert.equal(json().type, 'json')
     const env = cleanEnv({ FOO: '{"x": 123}' }, { FOO: json() })
-    assert.deepEqual(env, { FOO: { x: 123 } })
+    assert.deepEqual(env, { FOO: { x: 123 }, NODE_ENV: 'production' })
 
     assert.throws(() => cleanEnv({ FOO: 'abc' }, { FOO: json() }, makeSilent), EnvError)
 })
@@ -133,7 +133,7 @@ test('url()', () => {
 test('str()', () => {
     assert.equal(str().type, 'str')
     const withEmpty = cleanEnv({ FOO: '' }, { FOO: str() })
-    assert.deepEqual(withEmpty, { FOO: '' })
+    assert.deepEqual(withEmpty, { FOO: '', NODE_ENV: 'production' })
 
     assert.throws(() => cleanEnv({ FOO: 42 }, { FOO: str() }, makeSilent), EnvError)
 })
@@ -144,7 +144,7 @@ test('custom types', () => {
     assert.equal(makeValidator(x => 'foo', 'some type')().type, 'some type')
 
     const fooEnv = cleanEnv({ FOO: 'asdf' }, { FOO: alwaysFoo() })
-    assert.deepEqual(fooEnv, { FOO: 'foo' })
+    assert.deepEqual(fooEnv, { FOO: 'foo', NODE_ENV: 'production' })
 
     const hex10 = makeValidator(x => {
         if (/^[a-f0-9]{10}$/.test(x)) return x
@@ -155,5 +155,5 @@ test('custom types', () => {
 
     // Default values work with custom validators as well
     const withDefault = cleanEnv({}, { FOO: hex10({ default: 'abcabcabc0' }) })
-    assert.deepEqual(withDefault, { FOO: 'abcabcabc0' })
+    assert.deepEqual(withDefault, { FOO: 'abcabcabc0', NODE_ENV: 'production' })
 })

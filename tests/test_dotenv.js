@@ -22,12 +22,12 @@ test('.env contents are cleaned', () => {
             MYNUM: num()
         }
     )
-    assert.deepEqual(env, { FOO: 'bar', BAR: 'asdfasdf', MYNUM: 4 })
+    assert.deepEqual(env, { FOO: 'bar', BAR: 'asdfasdf', MYNUM: 4, NODE_ENV: 'production' })
 })
 
 test('can opt out of dotenv with dotEnvPath=null', () => {
     const env = cleanEnv({ FOO: 'bar' }, {}, { dotEnvPath: null })
-    assert.deepEqual(env, { FOO: 'bar' })
+    assert.deepEqual(env, { FOO: 'bar', NODE_ENV: 'production' })
 })
 
 test('can use a custom .env file name', () => {
@@ -35,6 +35,6 @@ test('can use a custom .env file name', () => {
     fs.writeFileSync(path, 'CUSTOM=hi')
 
     const env = cleanEnv({ FOO: 'bar' }, {}, { dotEnvPath: path })
-    assert.deepEqual(env, { FOO: 'bar', CUSTOM: 'hi' })
+    assert.deepEqual(env, { FOO: 'bar', CUSTOM: 'hi', NODE_ENV: 'production' })
     fs.unlinkSync(path)
 })

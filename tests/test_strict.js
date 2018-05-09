@@ -10,7 +10,7 @@ const strictOption = { strict: true }
 // function
 const objStrictDeepEqual = (actual, desired) => {
     const desiredKeys = Object.keys(desired)
-    assert.deepEqual(Object.keys(actual), desiredKeys)
+    assert.deepEqual(Object.keys(actual).sort(), desiredKeys.sort())
     for (const k of desiredKeys) {
         assert.strictEqual(actual[k], desired[k])
     }
@@ -35,7 +35,7 @@ test('strict option: only specified fields are passed through', () => {
         },
         strictOption
     )
-    objStrictDeepEqual(env, { FOO: 'bar' })
+    objStrictDeepEqual(env, { FOO: 'bar', NODE_ENV: 'production' })
 })
 
 test('.env test in strict mode', () => {
@@ -46,7 +46,7 @@ test('.env test in strict mode', () => {
         },
         strictOption
     )
-    objStrictDeepEqual(env, { MYNUM: 4 })
+    objStrictDeepEqual(env, { MYNUM: 4, NODE_ENV: 'production' })
 })
 
 test('strict mode objects throw when invalid attrs are accessed', () => {
